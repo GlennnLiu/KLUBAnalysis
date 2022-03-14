@@ -1,0 +1,1 @@
+SignalScale rateParam * Radion3000 0.01
