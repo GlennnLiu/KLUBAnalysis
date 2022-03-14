@@ -8,19 +8,14 @@ import ROOT
 
 def redrawBorder():
    # this little macro redraws the axis tick marks and the pad border lines.
-   ROOT.gPad.Update();
-   ROOT.gPad.RedrawAxis();
+   ROOT.gPad.Update()
+   ROOT.gPad.RedrawAxis()
    l = ROOT.TLine()
    l.SetLineWidth(3)
-   l.DrawLine(ROOT.gPad.GetUxmin(), ROOT.gPad.GetUymax(), ROOT.gPad.GetUxmax(), ROOT.gPad.GetUymax());
-   l.DrawLine(ROOT.gPad.GetUxmax(), ROOT.gPad.GetUymin(), ROOT.gPad.GetUxmax(), ROOT.gPad.GetUymax());
-   l.DrawLine(ROOT.gPad.GetUxmin(), ROOT.gPad.GetUymin(), ROOT.gPad.GetUxmin(), ROOT.gPad.GetUymax());
-   l.DrawLine(ROOT.gPad.GetUxmin(), ROOT.gPad.GetUymin(), ROOT.gPad.GetUxmax(), ROOT.gPad.GetUymin());
-
-def getExpValue( kl,  yt): 
-    BR =1 
-    return (2.09*yt*yt*yt*yt +   0.28*yt*yt*kl*kl  -1.37*yt*yt*yt*kl)*2.44477/BR;
-
+   l.DrawLine(ROOT.gPad.GetUxmin(), ROOT.gPad.GetUymax(), ROOT.gPad.GetUxmax(), ROOT.gPad.GetUymax())
+   l.DrawLine(ROOT.gPad.GetUxmax(), ROOT.gPad.GetUymin(), ROOT.gPad.GetUxmax(), ROOT.gPad.GetUymax())
+   l.DrawLine(ROOT.gPad.GetUxmin(), ROOT.gPad.GetUymin(), ROOT.gPad.GetUxmin(), ROOT.gPad.GetUymax())
+   l.DrawLine(ROOT.gPad.GetUxmin(), ROOT.gPad.GetUymin(), ROOT.gPad.GetUxmax(), ROOT.gPad.GetUymin())
 
 def parseFile(filename, CL='50.0', exp=True):
     f = open(filename)
@@ -86,7 +81,7 @@ mg = ROOT.TMultiGraph()
 
 category = "comb_cat" # sboostedLLMcut  s1b1jresolvedMcut  s2b0jresolvedMcut  VBFloose
 year = "2018" # 2016 2017 2018
-tagName = "13Mar2021"
+tagName = "23Apr2021"
 
 
 if   year == "2016":
@@ -119,13 +114,11 @@ for i,channel in enumerate(channels):
         if 'CombChan' in channel:
             fName = 'cards_'+channel+tag[0]+'/out_Asym_VBF{0}_noTH.log'.format(lambdas[ipt])
         elif 'comb' in category:
-            fName = 'cards_'+channel+tag[0]+'/'+category+'/out_Asym_VBF{0}_noTH.log'.format(lambdas[ipt])
+            fName = 'cards_'+channel+tag[0]+'/out_Asym_VBF{0}_noTH.log'.format(lambdas[ipt])
         else:
             fName = 'cards_'+channel+tag[0]+'/'+category+tag[1]+'/out_Asym_VBF{0}_noTH.log'.format(lambdas[ipt])
 
         xval = klval[ipt]
-
-        if xval == 1: fName = fName.replace('_noTH','')
 
         corrFactor = 1.034772182
         yearN = 2018
@@ -138,7 +131,7 @@ for i,channel in enumerate(channels):
         #exp = parseFile(fName) * getXStheo(klval[ipt]) * 1000.0          # <- Excluded HH cross section [fb]
         #exp = parseFile(fName) * getXStheo(klval[ipt]) * 1000.0 * 0.073  # <- Excluded HH cross section times BR(bbtautau) [fb]
 
-        exp   = parseFile(fName) * getXStheo(klval[ipt],yearN) * corrFactor * 1000.0
+        exp  = parseFile(fName) * getXStheo(klval[ipt],yearN) * corrFactor * 1000.0 * 0.073
 
         ptsList.append((xval, exp))
 
@@ -204,9 +197,9 @@ else                                 : pt3.AddText("?category not defined?")
 
 
 hframe = ROOT.TH1F('hframe', '', 100, -5, 6)
-hframe.SetMinimum(20)
-if   year == "2016"          : hframe.SetMaximum(2300)
-else                         : hframe.SetMaximum(2300)
+hframe.SetMinimum(0)
+if   year == "2016"          : hframe.SetMaximum(200)
+else                         : hframe.SetMaximum(200)
 hframe.GetYaxis().SetTitleSize(0.047)
 hframe.GetXaxis().SetTitleSize(0.055)
 hframe.GetYaxis().SetLabelSize(0.045)
@@ -214,8 +207,9 @@ hframe.GetXaxis().SetLabelSize(0.045)
 hframe.GetXaxis().SetLabelOffset(0.012)
 hframe.GetYaxis().SetTitleOffset(1.2)
 hframe.GetXaxis().SetTitleOffset(1.1)
-hframe.GetYaxis().SetTitle("95% CL on #sigma_{VBF} (pp#rightarrow HHjj) [fb]")
-hframe.GetXaxis().SetTitle("C_{2V}")
+#hframe.GetYaxis().SetTitle("95% CL on #sigma_{VBF} #times #bf{#it{#Beta}} (pp#rightarrow HHjj#rightarrow jjbb#tautau) [fb]")
+hframe.GetYaxis().SetTitle("95% CL on #sigma_{VBF} #times #bf{#it{#Beta}}(HH#rightarrow bb#tau#tau) [fb]")
+hframe.GetXaxis().SetTitle("k_{VV}")
 hframe.SetStats(0)
 ROOT.gPad.SetTicky()
 hframe.Draw()
@@ -234,6 +228,6 @@ c1.RedrawAxis("g")
 leg.Draw()
 c1.Update()
 
-c1.Print('plots/comparison_channelsVBF_'+category+'_'+tag[0]+'.pdf','pdf')
+c1.Print('../plots/v4/comparison_channelsVBF_'+category+'_'+tag[0]+'_NEW.pdf','pdf')
 
 import pdb; pdb.set_trace()

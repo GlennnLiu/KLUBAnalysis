@@ -11,6 +11,8 @@ def parseOptions():
     parser.add_option('-o', '--outfile' , dest='outName' , type='string', default="w"     , help='output suffix')
     parser.add_option('-c', '--channel' , dest='channel' , type='string', default="TauTau", help='channel')
     parser.add_option('-y', '--year'    , dest='year'    , type='string', default="2016"  , help='year')
+    parser.add_option('-q', '--dynamQCD', dest='dynamQCD', type='int'   , default=0       , help='1:do QCD as rateParam / 0:read QCD from file')
+    parser.add_option('-B', '--renameH' , dest='renameH' , type='int'   , default=1       , help='1:rename singleH bkgs / 0:do not rename singleH bkgs')
 
     # store options and arguments as global variables
     global opt, args
@@ -20,13 +22,15 @@ parseOptions()
 
 listHistos = []
 
-systNamesOUT = ["CMS_scale_t_13TeV_"+opt.year+"_DM0","CMS_scale_t_13TeV_"+opt.year+"_DM1","CMS_scale_t_13TeV_"+opt.year+"_DM10","CMS_scale_t_13TeV_"+opt.year+"_DM11",
-                "CMS_scale_es_13TeV_"+opt.year+"_DM0", "CMS_scale_es_13TeV_"+opt.year+"_DM1", "CMS_scale_mes_13TeV_"+opt.year+"", "CMS_scale_j_13TeV_"+opt.year+"",
+systNamesOUT = ["CMS_scale_t_DM0_"+opt.year,"CMS_scale_t_DM1_"+opt.year,"CMS_scale_t_DM10_"+opt.year,"CMS_scale_t_DM11_"+opt.year,
+                "CMS_scale_t_eFake_"+opt.year+"_DM0", "CMS_scale_t_eFake_"+opt.year+"_DM1", "CMS_scale_t_muFake_"+opt.year,
                 "CMS_JES_FlavQCD", "CMS_JES_RelBal", "CMS_JES_HF", "CMS_JES_BBEC1", "CMS_JES_EC2", "CMS_JES_Abs", "CMS_JES_BBEC1_"+opt.year, "CMS_JES_EC2_"+opt.year,
-                "CMS_JES_Abs_"+opt.year, "CMS_JES_HF_"+opt.year, "CMS_JES_RelSample_"+opt.year]
+                "CMS_JES_Abs_"+opt.year, "CMS_JES_HF_"+opt.year, "CMS_JES_RelSample_"+opt.year,
+                "CMS_JES_13TeV_"+opt.year]
 
-systNames = ['tesXXX_DM0', 'tesXXX_DM1', 'tesXXX_DM10', 'tesXXX_DM11', 'eesXXX_DM0', 'eesXXX_DM1', 'mesXXX', 'jesXXXTot',
-             'jesXXX1', 'jesXXX2', 'jesXXX3', 'jesXXX4', 'jesXXX5', 'jesXXX6', 'jesXXX7', 'jesXXX8', 'jesXXX9', 'jesXXX10', 'jesXXX11']
+systNames = ['tesXXX_DM0', 'tesXXX_DM1', 'tesXXX_DM10', 'tesXXX_DM11', 'eesXXX_DM0', 'eesXXX_DM1', 'mesXXX',
+             'jesXXX1', 'jesXXX2', 'jesXXX3', 'jesXXX4', 'jesXXX5', 'jesXXX6', 'jesXXX7', 'jesXXX8', 'jesXXX9', 'jesXXX10', 'jesXXX11',
+             'jesXXXTot']
 
 # if running WITHOUT the shape syst, uncomment these 2 lines:
 #systNamesOUT = []
@@ -48,18 +52,46 @@ for key in inFile.GetListOfKeys():
 	ih = ih + 1
 	if (ih%500 == 0): print key,ih,"/",toth
 	kname = key.GetName()
+
+	# If QCD is read from file and not computed as rate parameter in the datacards
+	# we can skip all the SStight/OSinviso/SSinviso shifted template and save
+	# a lot of time and space
+	if opt.dynamQCD == 0:
+		if 'SStight' in kname and 'Up'   in kname: continue
+		if 'SStight' in kname and 'Down' in kname: continue
+		if 'SStight' in kname and 'up'   in kname: continue
+		if 'SStight' in kname and 'down' in kname: continue
+
+		if 'OSinviso' in kname and 'Up'   in kname: continue
+		if 'OSinviso' in kname and 'Down' in kname: continue
+		if 'OSinviso' in kname and 'up'   in kname: continue
+		if 'OSinviso' in kname and 'down' in kname: continue
+
+		if 'SSinviso' in kname and 'Up'   in kname: continue
+		if 'SSinviso' in kname and 'Down' in kname: continue
+		if 'SSinviso' in kname and 'up'   in kname: continue
+		if 'SSinviso' in kname and 'down' in kname: continue
+
 	template = inFile.Get(kname)
 
 	#protection against empty bins
 	changedInt = False
 	integral = template.Integral()
 	for ibin in range(1,template.GetNbinsX()+1):
+
+		#continue # uncomment this line ONLY when producing datacards with 1000 bins histograms for bin optimization
+
+		if "data" in kname: continue
+
 		if template.GetBinContent(ibin) <= 0:
 			changedInt = True
-			template.SetBinContent(ibin,0.000001)
-			template.SetBinError(ibin,0.000001)
+			template.SetBinContent(ibin,0.000000001)
+			template.SetBinError(ibin,0.000000001)
 
-	if integral>0 and changedInt and template.Integral()>0: template.Scale(integral/template.Integral())
+	if integral>0:
+		if changedInt and template.Integral()>0: template.Scale(integral/template.Integral())
+	else:
+		template.Scale(-100.) # set to negative in order to identify the problematic templates to be excluded in write_card.py
 
 	if "TH1" in template.ClassName():
 		for isyst in range(len(systNames)):
@@ -109,6 +141,19 @@ for key in inFile.GetListOfKeys():
 		# Fix the signal names after the systs have been read
 		if "GGHH_NLO" in kname: kname = kname.replace("GGHH_NLO","ggHH").replace("_xs","_kt_1_hbbhtt").replace("cHHH", "kl_")
 		if "VBFHH"    in kname: kname = kname.replace("VBFHH","qqHH").replace("C3","kl").replace("_xs","_hbbhtt")
+
+		# Rename singleH processes to use the HHModel BR scaling
+		# ggH --> ggH_htt
+		# qqH --> qqH_htt
+		# WH  --> WH_htt
+		# ZH  --> ZH_hbb
+		# ttH --> ttH_hbb
+		if opt.renameH:
+			if kname[0:4] == "ggH_": kname = kname.replace("ggH_","ggH_htt_")
+			if kname[0:4] == "qqH_": kname = kname.replace("qqH_","qqH_htt_")
+			if kname[0:3] == "WH_" : kname = kname.replace("WH_" ,"WH_htt_" )
+			if kname[0:3] == "ZH_" : kname = kname.replace("ZH_" ,"ZH_hbb_" )
+			if kname[0:4] == "ttH_": kname = kname.replace("ttH_","ttH_hbb_")
 
 		template.SetName(kname)
 		template.SetTitle(kname)

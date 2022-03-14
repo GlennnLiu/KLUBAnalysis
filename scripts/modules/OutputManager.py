@@ -283,6 +283,14 @@ class OutputManager:
                 for syst in allSysts:
 
                     # If var already contains one of the shape systs (tauup, taudown, jetup...)
+                    # do not create the shifted QCD template
+                    if 'tauup' in var or 'taudown' in var or \
+                       'eleup' in var or 'eledown' in var or \
+                       'muup'  in var or 'mudown'  in var or \
+                       'jetup' in var or 'jetdown' in var:
+                       continue
+
+                    # If var already contains one of the shape systs (tauup, taudown, jetup...)
                     # skip the syst from allSysts (otherwise it look for histograms with two systematics
                     # like 'var_sel_SR_tauup_PUjetIDUp' which do not make sense)
                     doubleSyst = False
@@ -407,140 +415,7 @@ class OutputManager:
                         self.histos[hQCD.GetName()] = hQCD
             
 
-
-
         ### FIXME: now do 2D histos
-        for var in self.variables2D:
-            for sel in self.sel_def:
-                for syst in allSysts:
-
-                    var = var.replace(":","_")
-                    # If var already contains one of the shape systs (tauup, taudown, jetup...)
-                    # skip the syst from allSysts (otherwise it look for histograms with two systematics
-                    # like 'var_sel_SR_tauup_PUjetIDUp' which do not make sense)
-                    doubleSyst = False
-                    namesToBeRemoved = ["tauup", "taudown", "eleup", "eledown", "muup", "mudown", "jetup", "jetdown"]
-                    for doubleName in namesToBeRemoved:
-                        if doubleName in var:
-                            doubleSyst = True
-                            break
-                    if syst != '' and doubleSyst: continue
-
-                    # for boosted category we use 'L' bTag WP
-                    if 'boost' in sel:
-                        if 'bTagSF' in syst:
-                            syst = syst.replace('M','L')
-
-                    ## make shape hist
-                    for idx, data in enumerate(self.data):
-                        hname = makeHistoName(data, sel+'_'+shapeSB, var)
-                        if idx == 0:
-                            hQCD = self.histos[hname].Clone(makeHistoName(QCDname, sel+'_'+SR, var, syst)) ## use SR name as this is where QCD refers to
-                            hQCD.SetTitle(hQCD.GetName())
-                        else:
-                            hQCD.Add(self.histos[hname])
-
-                    # subtract bkg
-                    for bkg in self.bkgs:
-                        hname = makeHistoName(bkg, sel+'_'+shapeSB, var, syst)
-                        hQCD.Add(self.histos[hname], -1.)
-
-                    ## remove negative bins if needed
-                    if removeNegBins:
-                        for ibin in range(1, hQCD.GetNbinsX()+1):
-                            for jbin in range(1, hQCD.GetNbinsY()+1):
-                                if hQCD.GetBinContent(ibin,jbin) < 0:
-                                    hQCD.SetBinContent(ibin,jbin, 1.e-6)
-
-                    ## now compute yield to be set
-                    for idx, data in enumerate(self.data):
-                        hname = makeHistoName(data, sel+'_'+yieldSB, var)
-                        if idx == 0:
-                            hyieldQCD = self.histos[hname].Clone(makeHistoName(QCDname+'yield', sel+'_'+yieldSB, var, syst))
-                        else:
-                            hyieldQCD.Add(self.histos[hname])
-
-                    for bkg in self.bkgs:
-                        hname = makeHistoName(bkg, sel+'_'+yieldSB, var, syst)
-                        hyieldQCD.Add(self.histos[hname], -1)
-
-                    ## now scale
-                    qcdYield = hyieldQCD.Integral()
-
-                    # SBtoSR ratio computation is dynamic for res1b and res2b, while it's
-                    # hard-coded for boosted and VBF multicategories, for more details see:
-                    # https://indico.cern.ch/event/987490/contributions/4157106/attachments/2165647/3655229/201218_QCD_JLH_posMeeting.pdf
-                    if computeSBtoSR:
-                        # If category is boosted use boost B/D (no-bTag)
-                        if 'boost' in sel and boostSBtoSR != 1.:
-                            SBtoSRfactor = boostSBtoSR
-                            print "... static boosted C/D = ", boostSBtoSR
-                        # Else is one of the VBF multiclasses use B/D from VBf inclusive
-                        elif 'class' in sel and classSBtoSR != 1.:
-                            SBtoSRfactor = classSBtoSR
-                            print "... static VBF multiclass C/D = ", classSBtoSR
-                        # else (res1b/res2b) compute dynamically the QCD
-                        else:
-                            SBtoSRfactor = self.makeQCD_SBtoSR(regionC, regionD, sel, var, syst, removeNegBins)
-
-                    # Check if original integral of shape histo (without removing negative bins) is <= 0
-                    # if yes, return 0 --> no QCD contribution is present for this variable/selection
-                    # (if is compatible with 0 (but >0) we keep it, the uncertainty will be large anyway)
-                    # ( if qcdYield <= 0.0 or self.isIntegralCompatible(hyieldQCD,0): )
-                    if qcdYield <= 0.0:
-                        #print '*** WARNING: integral of shapeQCD is negative or compatible with Zero! Setting QCD = 0 !'
-                        print '*** WARNING: integral of shapeQCD is negative! Setting QCD = 0 !'
-                        sc = 0.0
-                    else:
-                        sc = SBtoSRfactor*qcdYield/hQCD.Integral() if hQCD.Integral() > 0 else 0.0
-
-                    hQCD.Scale(sc)
-
-                    if eval(doFitIf):
-                        try:
-                            self.QCDfits
-                        except AttributeError:
-                            self.QCDfits = collections.OrderedDict()
-                            self.QCDfitresults = collections.OrderedDict()
-
-                        # the previous QCD histogram is still stored but as 'uncorr', and the new one gets QCDname
-                        hQCD.SetName('uncorr'+hQCD.GetName())
-                        hQCDCorr = hQCD.Clone(makeHistoName(QCDname, sel+'_'+SR, var, syst))
-                        hQCDCorr.Scale(1./hQCDCorr.Integral())
-                        hQCDNum = hyieldQCD.Clone(makeHistoName(QCDname+'FIT', sel+'_'+SR, var, syst))
-                        hQCDNum.Scale(1./hQCDNum.Integral()) ## both num and denom are normalized to 1
-
-                        hQCDNum.Divide(hQCDCorr)
-                        fFitFunc = ROOT.TF1('QCDFitFunc', fitFunc, hQCD.GetXaxis().GetXmin(), hQCD.GetXaxis().GetXmax())
-                        fitresult = hQCDNum.Fit(fFitFunc, "S")
-                        fitresult.SetName(makeHistoName(QCDname+'fitresult', sel+'_'+SR, var, syst))
-
-                        self.QCDfits[hQCDNum.GetName()] = hQCDNum
-                        self.QCDfitresults[fitresult.GetName()] = fitresult
-                        # the fit gets attached to the histo, so that one can retrieve parameters as TF1* f = histo->GetFunction("QCDFitFunc")
-
-                        ## scale the QCD template according to the fit function at the bin center
-                        normaliz = hQCD.Integral()
-                        hQCDCorr.Multiply(fFitFunc) # NOTE: multiplication is done in the function range, so it's important to set this properly before. Errors are propagated.
-                        hQCDCorr.Scale(normaliz/hQCDCorr.Integral())
-                        if doUpDown:
-                            hQCDCorrup   = hQCD.Clone(hQCDCorr.GetName()+"_Up")
-                            hQCDCorrdown = hQCD.Clone(hQCDCorr.GetName()+"_Down")
-                            self.histos[hQCDCorr.GetName()+"_Up"]   = hQCDCorrup
-                            self.histos[hQCDCorr.GetName()+"_Down"] = hQCDCorrdown
-                        else:
-                            self.histos[hQCDCorr.GetName()] = hQCDCorr
-
-                    ## store hQCD - is either 'QCD' if no fit was done or uncorrQCD if fit was done, in any case is the final one to plot
-                    if doUpDown:
-                        hQCDup   = hQCD.Clone(hQCD.GetName()+"_Up")
-                        hQCDdown = hQCD.Clone(hQCD.GetName()+"_Down")
-                        self.histos[hQCD.GetName()+"_Up"]   = hQCDup
-                        self.histos[hQCD.GetName()+"_Down"] = hQCDdown
-                    else:
-                        self.histos[hQCD.GetName()] = hQCD
-
-
 
     def rebin(self, var, sel, newbinning):        
         print '... rebinning histos for var:' , var, 'sel:', sel

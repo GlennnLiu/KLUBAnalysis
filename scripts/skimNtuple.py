@@ -59,8 +59,12 @@ if __name__ == "__main__":
     parser.add_option ('-t', '--toprew'    , dest='toprew'    , help='is TT bar sample to compute reweight?' , default=False)
     parser.add_option ('-b', '--topstitch' , dest='topstitch' , help='type of TT gen level decay pruning for stitch'        , default='0')
     parser.add_option ('-g', '--genjets'   , dest='genjets'   , help='loop on genjets to determine the number of b hadrons' , default=False)
-    parser.add_option ('-w', '--weight'    , dest='weightHH'  , help='histo map for hh reweight'             , default='0')
     parser.add_option ('-a', '--ishhsignal', dest='ishhsignal', help='isHHsignal'                            , default=False)
+    parser.add_option ('--BSMname',          dest='BSMname'   , help='additional name for EFT benchmarks'    , default='none')
+    parser.add_option ('--EFTbm',            dest='EFTrew'    , help='EFT benchmarks [SM, 1..12, 1b..7b, 8a, c2scan, manual]', default='none')
+    parser.add_option ('--order',            dest='order'     , help='order of reweight: lo/nlo'             , default='nlo')
+    parser.add_option ('--uncert',           dest='uncert'    , help='uncertainty on the reweight coeffs'    , default='0')
+    parser.add_option ('--cms_fake',         dest='cms_fake'  , help='invert some couplings for 2017/2018'   , default='0')
     parser.add_option ('--kl',               dest='klreweight', help='kl for dynamic reweight'              , default='-999.0')
     parser.add_option ('--kt',               dest='ktreweight', help='kt for dynamic reweight'              , default='-999.0')
     parser.add_option ('--c2',               dest='c2reweight', help='c2 for dynamic reweight'              , default='-999.0')
@@ -87,7 +91,7 @@ if __name__ == "__main__":
         scriptFile = open (opt.output + '/hadder.sh', 'w')
         scriptFile.write ('#!/bin/bash\n')
         scriptFile.write ('source /cvmfs/cms.cern.ch/cmsset_default.sh\n')
-        scriptFile.write ('cd /home/llr/cms/amendola/HHLegacy/CMSSW_11_1_0pre6/src\n')
+        scriptFile.write ('cd /home/llr/cms/motta/HHLegacy/CMSSW_11_1_0pre6/src\n')
         scriptFile.write ('eval `scram r -sh`\n')
         scriptFile.write ('cd %s\n'%currFolder)
         scriptFile.write ('source scripts/setup.sh\n')
@@ -164,11 +168,11 @@ if __name__ == "__main__":
     # submit the jobs
     # ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
-    skimmer = 'skimNtuple2018_VBFHLT.exe'
-    if (opt.year == 2017):
-        skimmer = 'skimNtuple2016.exe'
-    elif (opt.year == 2016):
-        skimmer = 'skimNtuple2016.exe'
+    skimmer = 'skimNtuple2018_HHbtag.exe'
+    if (opt.year == '2017'):
+        skimmer = 'skimNtuple2017_HHbtag.exe'
+    elif (opt.year == '2016'):
+        skimmer = 'skimNtuple2016_HHbtag.exe'
 
 
     if opt.config == 'none' :
@@ -198,6 +202,14 @@ if __name__ == "__main__":
     tagname = "/" + opt.tag if opt.tag else ''
     jobsDir = currFolder + tagname + '/SKIM_' + basename (opt.input)
     jobsDir = jobsDir.rstrip (".txt")
+    if float(opt.klreweight) > -990 and opt.BSMname == 'none':
+        print '!WARNING! You requested manual HH reweighting, but did not set a proper BSMname! Exiting!'
+        sys.exit (0)
+    elif opt.EFTrew != 'none':
+        jobsDir = jobsDir + '_' + opt.EFTrew
+    elif opt.BSMname != 'none':
+        jobsDir = jobsDir + '_' + opt.BSMname
+
     if os.path.exists (jobsDir) : os.system ('rm -f ' + jobsDir + '/*')
     else                        : os.system ('mkdir -p ' + jobsDir)
 
@@ -219,7 +231,7 @@ if __name__ == "__main__":
         scriptFile.write ('#!/bin/bash\n')
         scriptFile.write ('export X509_USER_PROXY=~/.t3/proxy.cert\n')
         scriptFile.write ('source /cvmfs/cms.cern.ch/cmsset_default.sh\n')
-        scriptFile.write ('cd /home/llr/cms/amendola/HHLegacy/CMSSW_11_1_0pre6/src\n')
+        scriptFile.write ('cd /home/llr/cms/motta/HHLegacy/CMSSW_11_1_0pre6/src\n')
         #scriptFile.write ('export SCRAM_ARCH=slc6_amd64_gcc472\n')
         scriptFile.write ('eval `scram r -sh`\n')
         scriptFile.write ('cd %s\n'%currFolder)
@@ -236,15 +248,14 @@ if __name__ == "__main__":
         if opt.toprew=="True" : command += " 1 "
         else                  : command += " 0 "   
         if opt.genjets=="True": command += " 1 "
-        else                  : command += " 0 "   
-        command += (" " + opt.weightHH)
+        else                  : command += " 0 "
         command += " " + opt.topstitch
         if opt.domt2          : command += " 1 " ## inspiegabilmente questo e' un bool
         else                  : command += " 0 "
         if opt.ishhsignal     : command += " 1 "
         else                  : command += " 0 "
         command += (" " + opt.njets)
-        command += (" " + opt.klreweight + " " + opt.ktreweight + " " + opt.c2reweight + " " + opt.cgreweight + " " + opt.c2greweight)
+        command += (" " + opt.EFTrew + " " + opt.order + " " + opt.uncert + " " + opt.cms_fake + " " + opt.klreweight + " " + opt.ktreweight + " " + opt.c2reweight + " " + opt.cgreweight + " " + opt.c2greweight)
         command += (" " + opt.susyModel)
         command += (" " + opt.PUweights)
         command += (" " + opt.DY_nJets)
@@ -275,7 +286,7 @@ if __name__ == "__main__":
 
         
         #command = '/opt/exp_soft/cms/t3/t3submit_el7 -' + opt.queue + ' ' + jobsDir + '/skimJob_' + str (n) + '.sh'
-        command = '/home/llr/cms/amendola/t3submit -' + opt.queue + ' ' + jobsDir + '/skimJob_' + str (n) + '.sh'
+        command = '/home/llr/cms/motta/t3submit -' + opt.queue + ' ' + jobsDir + '/skimJob_' + str (n) + '.sh'
         if opt.sleep : time.sleep (0.1)
         os.system (command)
         commandFile.write (command + '\n')
